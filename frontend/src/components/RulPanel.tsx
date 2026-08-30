@@ -15,8 +15,8 @@ interface RulPanelProps {
 }
 
 export const RulPanel: React.FC<RulPanelProps> = ({ rul }) => {
-  const baselineCycles = rul?.rul_baseline_mlp ?? rul?.baseline_mlp_cycles ?? rul?.rul_baseline ?? null;
-  const pinnCycles = rul?.rul_pinn ?? rul?.pinn_cycles ?? 920;
+  const baselineCycles = rul?.baseline_mlp_cycles ?? rul?.rul_baseline ?? null;
+  const pinnCycles = rul?.pinn_cycles ?? rul?.rul_pinn ?? 920;
 
   return (
     <div className="space-y-6">

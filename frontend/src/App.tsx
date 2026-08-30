@@ -26,7 +26,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 2. Arrhenius Equation (Preserved Position) */}
-      <div className="absolute top-[6%] left-[42%] font-mono text-[11px] tracking-widest font-semibold opacity-35">
+      <div className="absolute top-[6%] left-[42%] font-mono text-xs tracking-widest font-semibold">
         k = A·e^(-Ea/RT)
       </div>
 
@@ -40,7 +40,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 4. Voltage Delta Badge */}
-      <div className="absolute top-[5%] right-[28%] font-mono text-[11px] tracking-widest font-bold opacity-35">
+      <div className="absolute top-[5%] right-[28%] font-mono text-xs tracking-widest font-bold">
         &Delta;V = I·R_int
       </div>
 
@@ -78,7 +78,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 11. Monotonic Degradation Constraint (Mid Left-Center) */}
-      <div className="absolute top-[40%] left-[20%] font-mono text-[11px] tracking-widest font-bold opacity-35">
+      <div className="absolute top-[40%] left-[20%] font-mono text-xs tracking-widest font-bold">
         ∂Q / ∂t ≤ 0
       </div>
 
@@ -98,7 +98,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 14. C-Rate Flow Notation (Mid Right Margin) */}
-      <div className="absolute top-[54%] right-[3%] font-mono text-[11px] tracking-widest font-semibold opacity-35">
+      <div className="absolute top-[54%] right-[3%] font-mono text-[11px] tracking-widest font-semibold">
         [ C-Rate: 3.5C &bull; 45°C ]
       </div>
 
@@ -108,7 +108,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 16. Arrhenius Thermodynamic Factor (Lower Mid-Center) */}
-      <div className="absolute top-[64%] left-[34%] font-mono text-[11px] tracking-widest font-semibold opacity-35">
+      <div className="absolute top-[64%] left-[34%] font-mono text-xs tracking-widest font-semibold">
         D_eff = D_0 · exp(-E_a / RT)
       </div>
 
@@ -118,7 +118,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 18. Physics Loss Lagrangian Formulation (Bottom Mid-Right) */}
-      <div className="absolute bottom-[24%] right-[16%] font-mono text-[11px] tracking-widest font-bold opacity-35">
+      <div className="absolute bottom-[24%] right-[16%] font-mono text-xs tracking-widest font-bold">
         ℒ_total = ℒ_data + λ_p·ℒ_physics
       </div>
 
@@ -131,7 +131,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 20. Monotonic Derivative (Bottom Left-Center) */}
-      <div className="absolute bottom-[10%] left-[16%] font-mono text-[11px] tracking-widest font-bold opacity-35">
+      <div className="absolute bottom-[10%] left-[16%] font-mono text-xs tracking-widest font-bold">
         ∂Q / ∂t
       </div>
 
@@ -141,7 +141,7 @@ const ScatteredBackgroundElements: React.FC<{ theme?: 'light' | 'dark' }> = ({ t
       </svg>
 
       {/* 22. Butler-Volmer SEI Kinetics Notation (Bottom Right-Center) */}
-      <div className="absolute bottom-[8%] right-[22%] font-mono text-[11px] tracking-widest font-semibold opacity-35">
+      <div className="absolute bottom-[8%] right-[22%] font-mono text-xs tracking-widest font-semibold">
         j_sei = -F · k_sei · c_ec · exp(-αFη/RT)
       </div>
 
@@ -181,7 +181,7 @@ export const App: React.FC = () => {
     try {
       const response = await predictBatteryHealth(request);
       setPredictionData(response);
-      // Stay on the inputs page where results and Three.js fill levels are dynamically rendered
+      setScreen('results');
     } catch (err) {
       console.error('Prediction failed:', err);
       setError('Failed to compute battery degradation profile. Please check input boundaries.');
@@ -305,7 +305,7 @@ export const App: React.FC = () => {
         {/* ================= 2. SCENARIO INPUT SCREEN ================= */}
         {screen === 'input' && (
           <div 
-            className="relative min-h-screen w-full flex flex-col justify-start px-6 lg:px-12 py-10 select-none overflow-y-auto"
+            className="relative min-h-screen h-screen w-full flex flex-col justify-center px-6 lg:px-12 py-6 select-none overflow-hidden"
             style={{
               background: 'linear-gradient(to top, #0284c7 0%, rgba(2, 132, 199, 0.75) 15%, rgba(2, 132, 199, 0.35) 35%, rgba(255, 255, 255, 0.95) 65%, #ffffff 100%)'
             }}
@@ -349,18 +349,36 @@ export const App: React.FC = () => {
               <ArrowLeft className="w-6 h-6 sm:w-7 sm:h-7 stroke-[1.75]" />
             </button>
 
-            <div className="relative z-10 w-full flex items-center justify-center pt-10 pb-20">
-              <InputPanel 
-                onRunPrediction={handleRunPrediction} 
-                isLoading={isLoading} 
-                initialRequest={lastRequest}
-                predictionData={predictionData}
-                onViewDetailedAnalysis={() => setScreen('results')}
-              />
-            </div>
+            {!isLoading && (
+              <div className="relative z-10 w-full flex items-center justify-center pt-10">
+                <InputPanel 
+                  onRunPrediction={handleRunPrediction} 
+                  isLoading={isLoading} 
+                  initialRequest={lastRequest}
+                />
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="relative z-10 rounded-3xl bg-white/95 backdrop-blur-2xl border-2 border-slate-200/80 p-12 text-center max-w-lg mx-auto space-y-5 my-auto shadow-[0_20px_50px_rgba(2,132,199,0.16)]">
+                <div className="relative flex items-center justify-center">
+                  <Loader2 className="w-12 h-12 text-[#0284c7] animate-spin" />
+                  <Zap className="w-5 h-5 text-amber-500 absolute" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="font-space text-lg font-bold text-slate-900">Solving Coupled Differential PDEs</h3>
+                  <p className="text-xs font-mono text-slate-500">
+                    Evaluating neural loss ℒ_total = ℒ_data + λ_p ℒ_physics...
+                  </p>
+                </div>
+                <div className="w-48 h-1.5 bg-slate-100 rounded-full mx-auto overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-r from-blue-400 to-[#0284c7] animate-pulse" />
+                </div>
+              </div>
+            )}
 
             {error && (
-              <div className="relative z-10 max-w-xl mx-auto p-4 rounded-xl bg-red-50/90 border border-red-200 text-red-700 text-xs font-mono flex items-center gap-3">
+              <div className="relative z-10 max-w-xl mx-auto p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-mono flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
                 <span>{error}</span>
               </div>

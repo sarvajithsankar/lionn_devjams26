@@ -165,8 +165,6 @@ function buildResponseFromSeries(
   let sumSqErrPinn = 0;
   let sumAbsPctErrMlp = 0;
   let sumAbsPctErrPinn = 0;
-  let sumAbsErrMlp = 0;
-  let sumAbsErrPinn = 0;
 
   for (const idx of validIndices) {
     const actual = groundTruth[idx] as number;
@@ -175,8 +173,6 @@ function buildResponseFromSeries(
 
     sumSqErrMlp += Math.pow(predMlp - actual, 2);
     sumSqErrPinn += Math.pow(predPinn - actual, 2);
-    sumAbsErrMlp += Math.abs(predMlp - actual);
-    sumAbsErrPinn += Math.abs(predPinn - actual);
 
     if (actual !== 0) {
       sumAbsPctErrMlp += Math.abs((predMlp - actual) / actual);
@@ -189,8 +185,6 @@ function buildResponseFromSeries(
   const rmsePinn = Number(Math.sqrt(sumSqErrPinn / n).toFixed(4));
   const mapeBaselineMlp = Number(((sumAbsPctErrMlp / n) * 100).toFixed(2));
   const mapePinn = Number(((sumAbsPctErrPinn / n) * 100).toFixed(2));
-  const maeBaselineMlp = Number((sumAbsErrMlp / n).toFixed(5));
-  const maePinn = Number((sumAbsErrPinn / n).toFixed(5));
 
   const computePvi = (series: number[]): number => {
     let violations = 0;
@@ -198,14 +192,6 @@ function buildResponseFromSeries(
       if (series[i] > series[i - 1] + 0.001) violations++;
     }
     return Number(((violations / Math.max(1, series.length - 1)) * 100).toFixed(2));
-  };
-
-  const computeViolations = (series: number[]): number => {
-    let violations = 0;
-    for (let i = 1; i < series.length; i++) {
-      if (series[i] > series[i - 1] + 0.0001) violations++;
-    }
-    return violations;
   };
 
   const pviMlp = opts.fixedPviMlp ?? computePvi(capacityBaselineMlp);
@@ -237,8 +223,6 @@ function buildResponseFromSeries(
       mape_pinn: mapePinn,
       physics_violation_index_baseline_mlp: pviMlp,
       physics_violation_index_pinn: pviPinn,
-      mae_baseline_mlp: maeBaselineMlp,
-      mae_pinn: maePinn,
     },
     physics_loss_trace: (sampleResponse as any).physics_loss_trace ?? {
       epoch: Array.from({ length: 15 }, (_, i) => (i + 1) * 20),
@@ -250,10 +234,6 @@ function buildResponseFromSeries(
       rul_pinn: findRulCycle(capacityPinn),
       rul_ground_truth: trueRulCycle,
     },
-    violations: {
-      baseline_a: computeViolations(capacityBaselineMlp),
-      pinn: computeViolations(capacityPinn),
-    }
   };
 }
 
