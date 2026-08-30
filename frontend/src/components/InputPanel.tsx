@@ -1,10 +1,13 @@
 // src/components/InputPanel.tsx
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import gsap from 'gsap';
 import { PredictRequest, Profile } from '../types';
 import { getProfiles } from '../api/predict';
+import { useMagnetic } from '../hooks/useMagnetic';
+import { Battery3D } from './Battery3D';
 import { ArrowRight, ChevronDown, Check, Gauge, Activity, Infinity as InfinityIcon } from 'lucide-react';
 
-interface InputPanelProps {
+export interface InputPanelProps {
   onRunPrediction: (request: PredictRequest) => void;
   isLoading: boolean;
   initialRequest?: PredictRequest;
@@ -21,32 +24,58 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   );
   const [cRate, setCRate] = useState<number>(initialRequest?.c_rate ?? 3.5);
   const [ambientTemp, setAmbientTemp] = useState<number>(initialRequest?.ambient_temp_C ?? 45.0);
-  const [cycleHorizon, setCycleHorizon] = useState<number>(initialRequest?.cycle_range[1] ?? 1000);
+  const [cycleHorizon, setCycleHorizon] = useState<number>(initialRequest?.cycle_range?.[1] ?? 1000);
   
   const [isPresetOpen, setIsPresetOpen] = useState<boolean>(false);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRowsContainerRef = useRef<HTMLDivElement>(null);
+
+  const runBtnRef = useMagnetic<HTMLButtonElement>(0.2);
+
+  useEffect(() => {
+    if (!inputRowsContainerRef.current) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        '.gsap-input-row',
+        { opacity: 0, x: 20 },
+        {
+          opacity: 1,
+          x: 0,
+          duration: 0.45,
+          stagger: 0.08,
+          ease: 'power2.out',
+        }
+      );
+    }, inputRowsContainerRef);
+
+    return () => ctx.revert();
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
-    getProfiles().then((data) => {
-      if (isMounted) {
-        const profileList: Profile[] = Array.isArray(data) ? data : (data?.profiles ?? []);
-        setProfiles(profileList);
+    getProfiles()
+      .then((data) => {
+        if (isMounted && data) {
+          const profileList: Profile[] = Array.isArray(data) ? data : (data?.profiles ?? []);
+          setProfiles(profileList);
 
-        if (!selectedProfileId && profileList.length > 0 && !initialRequest?.profile_id && !initialRequest?.battery_id) {
-          const defaultProfile = profileList.find((p) => p.split === 'test') || profileList[0];
-          if (defaultProfile) {
-            setSelectedProfileId(defaultProfile.profile_id);
-            setCRate(defaultProfile.c_rate);
-            setAmbientTemp(defaultProfile.temperature);
-            if (typeof defaultProfile.max_cycles === 'number') {
-              setCycleHorizon(defaultProfile.max_cycles);
+          if (!selectedProfileId && profileList.length > 0 && !initialRequest?.profile_id && !initialRequest?.battery_id) {
+            const defaultProfile = profileList.find((p) => p.split === 'test') || profileList[0];
+            if (defaultProfile) {
+              setSelectedProfileId(defaultProfile.profile_id);
+              setCRate(defaultProfile.c_rate);
+              setAmbientTemp(defaultProfile.temperature);
+              if (typeof defaultProfile.max_cycles === 'number') {
+                setCycleHorizon(defaultProfile.max_cycles);
+              }
             }
           }
         }
-      }
-    });
+      })
+      .catch((err) => {
+        console.warn('Backend profiles not yet reachable:', err);
+      });
 
     return () => {
       isMounted = false;
@@ -90,7 +119,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
 
   const handleManualCycleChange = (val: number) => {
     setSelectedProfileId(null);
-    setCycleHorizon(val);
+    setCycleHorizon(Math.max(1, Math.round(val)));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -99,64 +128,17 @@ export const InputPanel: React.FC<InputPanelProps> = ({
       ...(selectedProfileId ? { profile_id: selectedProfileId, battery_id: selectedProfileId } : {}),
       c_rate: Number(cRate),
       ambient_temp_C: Number(ambientTemp),
-      cycle_range: [0, Number(cycleHorizon)],
+      cycle_range: [0, Math.round(Number(cycleHorizon))],
     });
   };
 
-  const { tempGlowStyle, isFreezing, isOverheating, batteryOutlineClass } = useMemo(() => {
-    let glowColor = '';
-    let glowBlur = 45;
-    const freezing = ambientTemp <= -10;
-    const overheating = ambientTemp >= 50;
-
-    if (ambientTemp <= -10) {
-      const t = Math.min(1, (-10 - ambientTemp) / 10);
-      glowColor = `rgba(56, 115, 255, ${0.45 + t * 0.25})`;
-      glowBlur = 55;
-    } else if (ambientTemp < 10) {
-      const t = (10 - ambientTemp) / 20;
-      glowColor = `rgba(2, 132, 199, ${0.15 + t * 0.3})`;
-      glowBlur = 40;
-    } else if (ambientTemp <= 30) {
-      glowColor = 'rgba(255, 255, 255, 0.2)';
-      glowBlur = 25;
-    } else if (ambientTemp < 50) {
-      const t = (ambientTemp - 30) / 20;
-      glowColor = `rgba(245, 158, 11, ${0.2 + t * 0.35})`;
-      glowBlur = 50;
-    } else {
-      const t = Math.min(1, (ambientTemp - 50) / 15);
-      glowColor = `rgba(239, 68, 68, ${0.55 + t * 0.35})`;
-      glowBlur = 65;
-    }
-
-    let outline = 'border-slate-300';
-    if (freezing) outline = 'border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)]';
-    if (overheating) outline = 'border-red-500 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.6)]';
-
-    return {
-      tempGlowStyle: {
-        backgroundColor: glowColor,
-        filter: `blur(${glowBlur}px)`,
-      },
-      isFreezing: freezing,
-      isOverheating: overheating,
-      batteryOutlineClass: outline,
-    };
-  }, [ambientTemp]);
-
-  const pulseDuration = useMemo(() => {
-    const clamped = Math.max(0.5, Math.min(5.0, cRate));
-    return `${2.2 - ((clamped - 0.5) / 4.5) * 1.7}s`;
-  }, [cRate]);
-
-  const activeSegments = useMemo(() => {
-    return Math.min(5, Math.max(1, Math.round((cRate / 5.0) * 5)));
+  const chargeLevel = useMemo(() => {
+    return Math.min(1.0, Math.max(0.1, cRate / 5.0));
   }, [cRate]);
 
   const cRatePercent = Math.min(100, Math.max(0, ((cRate - 0.5) / (5.0 - 0.5)) * 100));
   const tempPercent = Math.min(100, Math.max(0, ((ambientTemp - (-20)) / (65 - (-20))) * 100));
-  const cyclePercent = Math.min(100, Math.max(0, ((cycleHorizon - 100) / (2000 - 100)) * 100));
+  const cyclePercent = Math.min(100, Math.max(0, ((cycleHorizon - 1) / (2000 - 1)) * 100));
 
   const activeProfile = Array.isArray(profiles) ? profiles.find((p) => p.profile_id === selectedProfileId) : undefined;
   const modeLabel = activeProfile
@@ -168,10 +150,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
       
       <div className="w-full h-full flex flex-row items-stretch gap-6">
         
-        {/* ================= LEFT COLUMN (~40% Width) ================= */}
+        {/* ================= LEFT COLUMN ================= */}
         <div className="w-[40%] h-full rounded-[32px] bg-slate-900/[0.04] backdrop-blur-[24px] border border-white/70 p-6 flex flex-col justify-between shadow-[0_16px_40px_rgba(2,132,199,0.06)] overflow-hidden">
           
-          {/* Mode Header & Dynamic Profiles Dropdown */}
           <div className="flex items-center justify-between gap-3 shrink-0">
             <div className="flex flex-col">
               <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400">
@@ -243,49 +224,12 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             </div>
           </div>
 
-          {/* Locked Battery Card Dimensions */}
-          <div className="relative my-auto w-full max-w-[390px] mx-auto h-[78%] max-h-[640px] rounded-[24px] bg-white border border-slate-200/70 p-4 flex flex-col items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.02)] overflow-hidden">
-            
-            <div
-              className="absolute w-[170px] h-[240px] rounded-full pointer-events-none transition-all duration-700 ease-out"
-              style={tempGlowStyle}
+          <div className="relative my-auto w-full max-w-[390px] mx-auto h-[78%] max-h-[640px] rounded-[32px] bg-gradient-to-b from-white/95 via-slate-50/80 to-slate-100/90 backdrop-blur-2xl border border-white/80 p-2 flex flex-col items-center justify-center shadow-[0_20px_50px_rgba(2,132,199,0.08),0_1px_2px_rgba(255,255,255,0.9)_inset] overflow-hidden">
+            <Battery3D
+              chargeLevel={chargeLevel}
+              temperatureC={ambientTemp}
+              cycleHorizon={cycleHorizon}
             />
-
-            {isFreezing && (
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-cyan-200/25 via-blue-100/10 to-transparent border-t-2 border-cyan-300" />
-            )}
-
-            {isOverheating && (
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-red-500/10 via-orange-400/5 to-transparent animate-pulse" />
-            )}
-
-            <div className="relative z-10 w-[125px] sm:w-[138px] h-[230px] sm:h-[255px] flex flex-col items-center">
-              <div className="w-11 h-3.5 rounded-t-md bg-slate-300 border-2 border-b-0 border-slate-400/80" />
-
-              <div className={`w-full flex-1 rounded-[18px] border-[3px] ${batteryOutlineClass} bg-slate-50/90 p-2 flex flex-col-reverse justify-between gap-1.5 shadow-inner transition-all duration-500`}>
-                {[1, 2, 3, 4, 5].map((segIndex) => {
-                  const isFilled = segIndex <= activeSegments;
-                  return (
-                    <div
-                      key={segIndex}
-                      className={`w-full h-[36px] rounded-lg transition-all duration-300 ${
-                        isFilled
-                          ? isOverheating
-                            ? 'bg-gradient-to-r from-orange-500 via-red-500 to-amber-500 shadow-[0_2px_8px_rgba(239,68,68,0.4)]'
-                            : isFreezing
-                            ? 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 shadow-[0_2px_8px_rgba(6,182,212,0.4)]'
-                            : 'bg-gradient-to-r from-[#0284c7] via-[#38bdf8] to-[#2563eb] shadow-[0_2px_8px_rgba(2,132,199,0.3)]'
-                          : 'bg-slate-200/60'
-                      }`}
-                      style={{
-                        animation: isFilled ? `pulseGlow ${pulseDuration} infinite ease-in-out` : 'none',
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
           </div>
 
           <div className="pt-2 text-center shrink-0">
@@ -296,13 +240,13 @@ export const InputPanel: React.FC<InputPanelProps> = ({
 
         </div>
 
-        {/* ================= RIGHT COLUMN (~60% Width) ================= */}
+        {/* ================= RIGHT COLUMN ================= */}
         <div className="w-[60%] h-full rounded-[32px] bg-slate-900/[0.04] backdrop-blur-[24px] border border-white/70 p-6 sm:p-8 flex flex-col justify-between shadow-[0_16px_40px_rgba(2,132,199,0.06)]">
           
-          <div className="flex-1 flex flex-col justify-center gap-5">
+          <div ref={inputRowsContainerRef} className="flex-1 flex flex-col justify-center gap-5">
             
             {/* ROW 1: Ambient Temperature */}
-            <div className="h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+            <div className="gsap-input-row h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
               <div className="flex items-center gap-3.5 w-48 sm:w-56 shrink-0">
                 <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm">
                   <Gauge className="w-5 h-5 stroke-[2]" />
@@ -338,7 +282,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 />
               </div>
 
-              {/* 1 & 2. Widened input with step="any" */}
               <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
                 <input
                   type="number"
@@ -354,7 +297,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             </div>
 
             {/* ROW 2: Charge Rate (C-Rate) */}
-            <div className="h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+            <div className="gsap-input-row h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
               <div className="flex items-center gap-3.5 w-48 sm:w-56 shrink-0">
                 <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm">
                   <Activity className="w-5 h-5 stroke-[2]" />
@@ -374,7 +317,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   type="range"
                   min="0.5"
                   max="5.0"
-                  step="0.1"
+                  step="0.01"
                   value={cRate}
                   onMouseDown={() => setActiveSlider('crate')}
                   onMouseUp={() => setActiveSlider(null)}
@@ -390,7 +333,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 />
               </div>
 
-              {/* 1 & 2. Widened input with step="any" */}
               <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
                 <input
                   type="number"
@@ -405,8 +347,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
               </div>
             </div>
 
-            {/* ROW 3: Degradation Horizon Target (Integer Only) */}
-            <div className="h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+            {/* ROW 3: Cycle Horizon Target (Exact Step of 1 from 1 to 2000+) */}
+            <div className="gsap-input-row h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
               <div className="flex items-center gap-3.5 w-48 sm:w-56 shrink-0">
                 <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm">
                   <InfinityIcon className="w-5 h-5 stroke-[2]" />
@@ -424,15 +366,15 @@ export const InputPanel: React.FC<InputPanelProps> = ({
               <div className="flex-1 px-4">
                 <input
                   type="range"
-                  min="100"
+                  min="1"
                   max="2000"
-                  step="10"
+                  step="1"
                   value={cycleHorizon}
                   onMouseDown={() => setActiveSlider('cycle')}
                   onMouseUp={() => setActiveSlider(null)}
                   onTouchStart={() => setActiveSlider('cycle')}
                   onTouchEnd={() => setActiveSlider(null)}
-                  onChange={(e) => handleManualCycleChange(parseInt(e.target.value))}
+                  onChange={(e) => handleManualCycleChange(parseInt(e.target.value, 10))}
                   style={{
                     background: `linear-gradient(to right, #0284c7 0%, #0284c7 ${cyclePercent}%, #e2e8f0 ${cyclePercent}%, #e2e8f0 100%)`
                   }}
@@ -442,15 +384,15 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
+              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
                 <input
                   type="number"
-                  min="100"
-                  max="2500"
-                  step="10"
+                  min="1"
+                  max="5000"
+                  step="1"
                   value={cycleHorizon}
-                  onChange={(e) => handleManualCycleChange(parseInt(e.target.value) || 100)}
-                  className="w-14 bg-transparent text-right outline-none font-mono font-bold"
+                  onChange={(e) => handleManualCycleChange(parseInt(e.target.value, 10) || 1)}
+                  className="w-16 bg-transparent text-right outline-none font-mono font-bold"
                 />
                 <span className="text-slate-500">Cycles</span>
               </div>
@@ -461,9 +403,10 @@ export const InputPanel: React.FC<InputPanelProps> = ({
           {/* Run Diagnostics Button */}
           <div className="w-full pt-4">
             <button
+              ref={runBtnRef}
               type="submit"
               disabled={isLoading}
-              className="group relative w-full h-[74px] flex items-center justify-center rounded-full border border-white/60 bg-[#0284c7] text-white shadow-[0_12px_28px_-6px_rgba(2,132,199,0.4)] hover:shadow-[0_16px_36px_-4px_rgba(2,132,199,0.6)] active:scale-[0.99] transition-all duration-300 overflow-hidden cursor-pointer disabled:opacity-50"
+              className="group relative w-full h-[74px] flex items-center justify-center rounded-full border border-white/60 bg-[#0284c7] text-white shadow-[0_12px_28px_-6px_rgba(2,132,199,0.4)] hover:shadow-[0_16px_36px_-4px_rgba(2,132,199,0.6)] active:scale-[0.99] transition-colors duration-300 overflow-hidden cursor-pointer disabled:opacity-50"
             >
               <span 
                 className="absolute inset-0 bg-gradient-to-r from-[#0284c7] via-[#38bdf8] to-[#2563eb] translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-500 ease-out pointer-events-none" 
@@ -483,3 +426,5 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     </form>
   );
 };
+
+export default InputPanel;

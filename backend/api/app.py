@@ -16,7 +16,7 @@ from backend.data.loader import (
     simulate_degradation_ode,
     get_profile_label,
 )
-from backend.models import baseline_a, physics_lstm as pinn
+from backend.models import baseline_a, pinn
 from backend.utils.metrics import evaluate_all
 
 logger = logging.getLogger("battery_api")
@@ -385,5 +385,3 @@ def predict_lstm(req: PredictRequest) -> dict:
         "ground_truth_type": ground_truth_type,
         "warning": warning_msg,
     }
-
-
