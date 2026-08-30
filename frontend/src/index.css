@@ -224,5 +224,105 @@ z-index: 1;
 
 /* Custom Range Slider */
 .lionn-slider {
-@apply w-full h-2 bg-[#222227] rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-none;
+  @apply w-full h-2 bg-[#222227] rounded-lg appearance-none cursor-pointer accent-amber-500 focus:outline-none;
 }
+
+/* Custom range slider styling */
+.custom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px !important;
+  border-radius: 3px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.custom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  border: 2px solid #0066FF !important;
+  box-shadow: 0 0 6px rgba(0, 102, 255, 0.4) !important;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.custom-slider::-moz-range-thumb {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  border: 2px solid #0066FF !important;
+  box-shadow: 0 0 6px rgba(0, 102, 255, 0.4) !important;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.custom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.custom-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Shimmer Background Animation */
+@keyframes shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.shimmer-bg {
+  background: linear-gradient(90deg, #0066FF, #00C2FF, #0066FF) !important;
+  background-size: 200% auto !important;
+  animation: shimmer 1.5s linear infinite !important;
+}
+
+/* Success Green Flash Animation */
+.success-flash-bg {
+  background: #10B981 !important;
+  border-color: #10B981 !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.6) !important;
+  transition: none !important;
+}
+
+/* Results Panel Slide-in Animation */
+@keyframes slideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Tooltip Fade In */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 200ms ease-out forwards;
+}
+

@@ -17,9 +17,9 @@ interface ScorecardPanelProps {
 }
 
 export const ScorecardPanel: React.FC<ScorecardPanelProps> = ({ metrics }) => {
-  const baselineRmse = metrics?.baseline_rmse ?? metrics?.rmse_baseline ?? 0.0421;
-  const pinnRmse = metrics?.pinn_rmse ?? metrics?.rmse_pinn ?? 0.0084;
-  const baselinePvi = metrics?.baseline_pvi ?? metrics?.pvi_baseline ?? 0.142;
+  const baselineRmse = metrics?.rmse_baseline_mlp ?? metrics?.baseline_rmse ?? metrics?.rmse_baseline ?? 0.0421;
+  const pinnRmse = metrics?.rmse_pinn ?? metrics?.pinn_rmse ?? 0.0084;
+  const baselinePvi = metrics?.physics_violation_index_baseline_mlp ?? metrics?.baseline_pvi ?? metrics?.pvi_baseline ?? 0.142;
 
   const rmseImprovement = baselineRmse > 0
     ? (((baselineRmse - pinnRmse) / baselineRmse) * 100).toFixed(1)

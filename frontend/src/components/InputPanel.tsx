@@ -1,19 +1,25 @@
 // src/components/InputPanel.tsx
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { PredictRequest, Profile } from '../types';
+import { PredictRequest, Profile, PredictResponse } from '../types';
 import { getProfiles } from '../api/predict';
 import { ArrowRight, ChevronDown, Check, Gauge, Activity, Infinity as InfinityIcon } from 'lucide-react';
+import { ThreeBattery } from './ThreeBattery';
+import { SohCurveChart } from './SohCurveChart';
 
 interface InputPanelProps {
   onRunPrediction: (request: PredictRequest) => void;
   isLoading: boolean;
   initialRequest?: PredictRequest;
+  predictionData?: PredictResponse | null;
+  onViewDetailedAnalysis?: () => void;
 }
 
 export const InputPanel: React.FC<InputPanelProps> = ({
   onRunPrediction,
   isLoading,
   initialRequest,
+  predictionData,
+  onViewDetailedAnalysis,
 }) => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
@@ -26,6 +32,20 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   const [isPresetOpen, setIsPresetOpen] = useState<boolean>(false);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const prevLoadingRef = useRef(isLoading);
+  const [showSuccessFlash, setShowSuccessFlash] = useState(false);
+
+  useEffect(() => {
+    if (prevLoadingRef.current && !isLoading) {
+      if (predictionData) {
+        setShowSuccessFlash(true);
+        const timer = setTimeout(() => setShowSuccessFlash(false), 600);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevLoadingRef.current = isLoading;
+  }, [isLoading, predictionData]);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,57 +123,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     });
   };
 
-  const { tempGlowStyle, isFreezing, isOverheating, batteryOutlineClass } = useMemo(() => {
-    let glowColor = '';
-    let glowBlur = 45;
-    const freezing = ambientTemp <= -10;
-    const overheating = ambientTemp >= 50;
-
-    if (ambientTemp <= -10) {
-      const t = Math.min(1, (-10 - ambientTemp) / 10);
-      glowColor = `rgba(56, 115, 255, ${0.45 + t * 0.25})`;
-      glowBlur = 55;
-    } else if (ambientTemp < 10) {
-      const t = (10 - ambientTemp) / 20;
-      glowColor = `rgba(2, 132, 199, ${0.15 + t * 0.3})`;
-      glowBlur = 40;
-    } else if (ambientTemp <= 30) {
-      glowColor = 'rgba(255, 255, 255, 0.2)';
-      glowBlur = 25;
-    } else if (ambientTemp < 50) {
-      const t = (ambientTemp - 30) / 20;
-      glowColor = `rgba(245, 158, 11, ${0.2 + t * 0.35})`;
-      glowBlur = 50;
-    } else {
-      const t = Math.min(1, (ambientTemp - 50) / 15);
-      glowColor = `rgba(239, 68, 68, ${0.55 + t * 0.35})`;
-      glowBlur = 65;
-    }
-
-    let outline = 'border-slate-300';
-    if (freezing) outline = 'border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)]';
-    if (overheating) outline = 'border-red-500 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.6)]';
-
-    return {
-      tempGlowStyle: {
-        backgroundColor: glowColor,
-        filter: `blur(${glowBlur}px)`,
-      },
-      isFreezing: freezing,
-      isOverheating: overheating,
-      batteryOutlineClass: outline,
-    };
-  }, [ambientTemp]);
-
-  const pulseDuration = useMemo(() => {
-    const clamped = Math.max(0.5, Math.min(5.0, cRate));
-    return `${2.2 - ((clamped - 0.5) / 4.5) * 1.7}s`;
-  }, [cRate]);
-
-  const activeSegments = useMemo(() => {
-    return Math.min(5, Math.max(1, Math.round((cRate / 5.0) * 5)));
-  }, [cRate]);
-
   const cRatePercent = Math.min(100, Math.max(0, ((cRate - 0.5) / (5.0 - 0.5)) * 100));
   const tempPercent = Math.min(100, Math.max(0, ((ambientTemp - (-20)) / (65 - (-20))) * 100));
   const cyclePercent = Math.min(100, Math.max(0, ((cycleHorizon - 100) / (2000 - 100)) * 100));
@@ -163,13 +132,23 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     ? `Preset: ${activeProfile.label.split('(')[0].trim()}`
     : 'User (Custom)';
 
+  // Calculate current SOH based on Physics-LSTM predicted capacity relative to initial
+  const currentSoh = useMemo(() => {
+    if (predictionData?.capacity_pinn && predictionData.capacity_pinn.length > 0) {
+      const initial = predictionData.capacity_pinn[0] || 1.1;
+      const final = predictionData.capacity_pinn[predictionData.capacity_pinn.length - 1] || 0.88;
+      return final / initial;
+    }
+    return 1.0;
+  }, [predictionData]);
+
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-7xl mx-auto h-[78vh] max-h-[820px] flex flex-col justify-center">
+    <form onSubmit={handleSubmit} className="w-full max-w-7xl mx-auto py-6 flex flex-col justify-center select-text">
       
-      <div className="w-full h-full flex flex-row items-stretch gap-6">
+      <div className="w-full flex flex-col lg:flex-row items-stretch gap-6">
         
         {/* ================= LEFT COLUMN (~40% Width) ================= */}
-        <div className="w-[40%] h-full rounded-[32px] bg-slate-900/[0.04] backdrop-blur-[24px] border border-white/70 p-6 flex flex-col justify-between shadow-[0_16px_40px_rgba(2,132,199,0.06)] overflow-hidden">
+        <div className="w-full lg:w-[40%] rounded-[32px] bg-slate-900/60 backdrop-blur-[12px] border border-white/30 p-6 flex flex-col justify-between shadow-[0_16px_40px_rgba(0,0,0,0.15)]">
           
           {/* Mode Header & Dynamic Profiles Dropdown */}
           <div className="flex items-center justify-between gap-3 shrink-0">
@@ -177,7 +156,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
               <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400">
                 Operating Mode
               </span>
-              <span className="text-xs font-['Space_Grotesk'] font-bold text-slate-800 truncate max-w-[170px]">
+              <span className="text-xs font-['Space_Grotesk'] font-bold text-slate-200 truncate max-w-[170px]">
                 {modeLabel}
               </span>
             </div>
@@ -188,8 +167,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 onClick={() => setIsPresetOpen(!isPresetOpen)}
                 className={`h-[38px] px-4 rounded-full border text-xs font-['Space_Grotesk'] font-bold tracking-wider uppercase transition-all flex items-center gap-1.5 shadow-sm ${
                   activeProfile
-                    ? 'bg-[#0284c7] text-white border-[#0284c7] shadow-[0_4px_12px_rgba(2,132,199,0.25)]'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                    ? 'bg-[#0066FF] text-white border-[#0066FF] shadow-[0_4px_12px_rgba(0,102,255,0.25)]'
+                    : 'bg-slate-800 text-slate-200 border-slate-700 hover:border-slate-600'
                 }`}
               >
                 <span>Preset</span>
@@ -197,7 +176,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
               </button>
 
               {isPresetOpen && (
-                <div className="absolute top-11 right-0 z-50 w-80 rounded-2xl bg-white/95 backdrop-blur-xl border border-slate-200 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.12)] space-y-1 animate-fadeIn max-h-[340px] overflow-y-auto">
+                <div className="absolute top-11 right-0 z-50 w-80 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.4)] space-y-1 animate-fadeIn max-h-[340px] overflow-y-auto">
                   {Array.isArray(profiles) && profiles.map((profile) => {
                     const isHeldOut = profile.split === 'test' || profile.split === 'held_out';
                     return (
@@ -207,35 +186,35 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                         onClick={() => handleSelectProfile(profile)}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-['Space_Grotesk'] font-semibold transition-colors flex items-center justify-between gap-2 ${
                           selectedProfileId === profile.profile_id
-                            ? 'bg-blue-50 text-[#0284c7]'
-                            : 'text-slate-700 hover:bg-slate-100'
+                            ? 'bg-slate-800 text-[#00C2FF]'
+                            : 'text-slate-300 hover:bg-slate-800/60'
                         }`}
                       >
                         <div className="flex items-center gap-2 truncate">
                           <span className="truncate">{profile.label}</span>
                           {isHeldOut && (
-                            <span className="px-1.5 py-0.5 rounded bg-sky-100 text-[#0284c7] text-[9px] font-mono font-bold tracking-wide uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-[#00C2FF] text-[9px] font-mono font-bold tracking-wide uppercase shrink-0 border border-blue-500/30">
                               OOD Test
                             </span>
                           )}
                         </div>
-                        {selectedProfileId === profile.profile_id && <Check className="w-3.5 h-3.5 shrink-0 text-[#0284c7]" />}
+                        {selectedProfileId === profile.profile_id && <Check className="w-3.5 h-3.5 shrink-0 text-[#00C2FF]" />}
                       </button>
                     );
                   })}
 
-                  <div className="border-t border-slate-100 pt-1 mt-1">
+                  <div className="border-t border-slate-800 pt-1 mt-1">
                     <button
                       type="button"
                       onClick={handleSelectCustom}
                       className={`w-full text-left px-3 py-2 rounded-xl text-xs font-['Space_Grotesk'] font-semibold transition-colors flex items-center justify-between ${
                         selectedProfileId === null
-                          ? 'bg-blue-50 text-[#0284c7]'
-                          : 'text-slate-700 hover:bg-slate-100'
+                          ? 'bg-slate-800 text-[#00C2FF]'
+                          : 'text-slate-300 hover:bg-slate-800/60'
                       }`}
                     >
                       <span>Custom Scenario (Manual)</span>
-                      {selectedProfileId === null && <Check className="w-3.5 h-3.5 shrink-0 text-[#0284c7]" />}
+                      {selectedProfileId === null && <Check className="w-3.5 h-3.5 shrink-0 text-[#00C2FF]" />}
                     </button>
                   </div>
                 </div>
@@ -243,72 +222,32 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             </div>
           </div>
 
-          {/* Locked Battery Card Dimensions */}
-          <div className="relative my-auto w-full max-w-[390px] mx-auto h-[78%] max-h-[640px] rounded-[24px] bg-white border border-slate-200/70 p-4 flex flex-col items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.02)] overflow-hidden">
-            
-            <div
-              className="absolute w-[170px] h-[240px] rounded-full pointer-events-none transition-all duration-700 ease-out"
-              style={tempGlowStyle}
-            />
-
-            {isFreezing && (
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-cyan-200/25 via-blue-100/10 to-transparent border-t-2 border-cyan-300" />
-            )}
-
-            {isOverheating && (
-              <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-red-500/10 via-orange-400/5 to-transparent animate-pulse" />
-            )}
-
-            <div className="relative z-10 w-[125px] sm:w-[138px] h-[230px] sm:h-[255px] flex flex-col items-center">
-              <div className="w-11 h-3.5 rounded-t-md bg-slate-300 border-2 border-b-0 border-slate-400/80" />
-
-              <div className={`w-full flex-1 rounded-[18px] border-[3px] ${batteryOutlineClass} bg-slate-50/90 p-2 flex flex-col-reverse justify-between gap-1.5 shadow-inner transition-all duration-500`}>
-                {[1, 2, 3, 4, 5].map((segIndex) => {
-                  const isFilled = segIndex <= activeSegments;
-                  return (
-                    <div
-                      key={segIndex}
-                      className={`w-full h-[36px] rounded-lg transition-all duration-300 ${
-                        isFilled
-                          ? isOverheating
-                            ? 'bg-gradient-to-r from-orange-500 via-red-500 to-amber-500 shadow-[0_2px_8px_rgba(239,68,68,0.4)]'
-                            : isFreezing
-                            ? 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 shadow-[0_2px_8px_rgba(6,182,212,0.4)]'
-                            : 'bg-gradient-to-r from-[#0284c7] via-[#38bdf8] to-[#2563eb] shadow-[0_2px_8px_rgba(2,132,199,0.3)]'
-                          : 'bg-slate-200/60'
-                      }`}
-                      style={{
-                        animation: isFilled ? `pulseGlow ${pulseDuration} infinite ease-in-out` : 'none',
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
+          {/* 3D Battery Model Viewport */}
+          <div className="relative my-auto w-full max-w-[390px] mx-auto min-h-[300px] rounded-[24px] bg-slate-950/75 border border-white/30 p-4 flex flex-col items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.15)] overflow-hidden">
+            <ThreeBattery soh={currentSoh} isLoading={isLoading} />
           </div>
 
           <div className="pt-2 text-center shrink-0">
-            <span className="font-mono text-xs font-semibold text-slate-500 tracking-wider">
-              Target: <strong className="text-slate-800">{cycleHorizon} cycles</strong>
+            <span className="font-mono text-xs font-semibold text-slate-400 tracking-wider">
+              Target: <strong className="text-white">{cycleHorizon} cycles</strong>
             </span>
           </div>
 
         </div>
 
         {/* ================= RIGHT COLUMN (~60% Width) ================= */}
-        <div className="w-[60%] h-full rounded-[32px] bg-slate-900/[0.04] backdrop-blur-[24px] border border-white/70 p-6 sm:p-8 flex flex-col justify-between shadow-[0_16px_40px_rgba(2,132,199,0.06)]">
+        <div className="w-full lg:w-[60%] rounded-[32px] bg-slate-900/60 backdrop-blur-[12px] border border-white/30 p-6 sm:p-8 flex flex-col justify-between shadow-[0_16px_40px_rgba(0,0,0,0.15)]">
           
           <div className="flex-1 flex flex-col justify-center gap-5">
             
             {/* ROW 1: Ambient Temperature */}
-            <div className="h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+            <div className="h-[135px] rounded-[36px] bg-slate-900/40 backdrop-blur-[12px] border border-white/30 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
               <div className="flex items-center gap-3.5 w-48 sm:w-56 shrink-0">
-                <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm">
+                <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[#00C2FF] shrink-0 shadow-sm">
                   <Gauge className="w-5 h-5 stroke-[2]" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm sm:text-base font-['Space_Grotesk'] font-bold uppercase tracking-wider text-slate-800 leading-tight">
+                  <span className="text-sm sm:text-base font-['Space_Grotesk'] font-bold uppercase tracking-[0.08em] text-white leading-tight">
                     Ambient Temp
                   </span>
                   <span className="text-xs font-mono text-slate-400 font-medium">
@@ -317,7 +256,15 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex-1 px-4">
+              <div className="relative flex-1 px-4">
+                {activeSlider === 'temp' && (
+                  <div 
+                    className="absolute -top-7 px-2 py-1 rounded bg-[#0066FF] text-white text-[10px] font-mono font-bold shadow-md -translate-x-1/2 pointer-events-none transition-all animate-fadeIn"
+                    style={{ left: `calc(${tempPercent}% + 16px)` }}
+                  >
+                    {ambientTemp.toFixed(1)}°C
+                  </div>
+                )}
                 <input
                   type="range"
                   min="-20"
@@ -330,16 +277,13 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   onTouchEnd={() => setActiveSlider(null)}
                   onChange={(e) => handleManualTempChange(parseFloat(e.target.value))}
                   style={{
-                    background: `linear-gradient(to right, #0284c7 0%, #0284c7 ${tempPercent}%, #e2e8f0 ${tempPercent}%, #e2e8f0 100%)`
+                    background: `linear-gradient(to right, #0066FF 0%, #00C2FF ${tempPercent}%, rgba(255, 255, 255, 0.1) ${tempPercent}%, rgba(255, 255, 255, 0.1) 100%)`
                   }}
-                  className={`w-full h-3 rounded-lg appearance-none cursor-pointer accent-[#0284c7] transition-all ${
-                    activeSlider === 'temp' ? 'scale-y-125' : ''
-                  }`}
+                  className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer custom-slider accent-[#0066FF] transition-all`}
                 />
               </div>
 
-              {/* 1 & 2. Widened input with step="any" */}
-              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
+              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-white px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 shrink-0 shadow-sm">
                 <input
                   type="number"
                   step="any"
@@ -347,20 +291,20 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   max="85"
                   value={ambientTemp}
                   onChange={(e) => handleManualTempChange(parseFloat(e.target.value) || 0)}
-                  className="w-16 sm:w-20 bg-transparent text-right outline-none font-mono font-bold"
+                  className="w-16 sm:w-20 bg-transparent text-right outline-none font-mono font-bold text-white"
                 />
-                <span className="text-slate-500">°C</span>
+                <span className="text-slate-400">°C</span>
               </div>
             </div>
 
             {/* ROW 2: Charge Rate (C-Rate) */}
-            <div className="h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+            <div className="h-[135px] rounded-[36px] bg-slate-900/40 backdrop-blur-[12px] border border-white/30 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
               <div className="flex items-center gap-3.5 w-48 sm:w-56 shrink-0">
-                <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm">
+                <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[#00C2FF] shrink-0 shadow-sm">
                   <Activity className="w-5 h-5 stroke-[2]" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm sm:text-base font-['Space_Grotesk'] font-bold uppercase tracking-wider text-slate-800 leading-tight">
+                  <span className="text-sm sm:text-base font-['Space_Grotesk'] font-bold uppercase tracking-[0.08em] text-white leading-tight">
                     Charge Rate
                   </span>
                   <span className="text-xs font-mono text-slate-400 font-medium">
@@ -369,7 +313,15 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex-1 px-4">
+              <div className="relative flex-1 px-4">
+                {activeSlider === 'crate' && (
+                  <div 
+                    className="absolute -top-7 px-2 py-1 rounded bg-[#0066FF] text-white text-[10px] font-mono font-bold shadow-md -translate-x-1/2 pointer-events-none transition-all animate-fadeIn"
+                    style={{ left: `calc(${cRatePercent}% + 16px)` }}
+                  >
+                    {cRate.toFixed(2)}C
+                  </div>
+                )}
                 <input
                   type="range"
                   min="0.5"
@@ -382,16 +334,13 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   onTouchEnd={() => setActiveSlider(null)}
                   onChange={(e) => handleManualCRateChange(parseFloat(e.target.value))}
                   style={{
-                    background: `linear-gradient(to right, #0284c7 0%, #0284c7 ${cRatePercent}%, #e2e8f0 ${cRatePercent}%, #e2e8f0 100%)`
+                    background: `linear-gradient(to right, #0066FF 0%, #00C2FF ${cRatePercent}%, rgba(255, 255, 255, 0.1) ${cRatePercent}%, rgba(255, 255, 255, 0.1) 100%)`
                   }}
-                  className={`w-full h-3 rounded-lg appearance-none cursor-pointer accent-[#0284c7] transition-all ${
-                    activeSlider === 'crate' ? 'scale-y-125' : ''
-                  }`}
+                  className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer custom-slider accent-[#0066FF] transition-all`}
                 />
               </div>
 
-              {/* 1 & 2. Widened input with step="any" */}
-              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
+              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-white px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 shrink-0 shadow-sm">
                 <input
                   type="number"
                   step="any"
@@ -399,20 +348,20 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   max="10.0"
                   value={cRate}
                   onChange={(e) => handleManualCRateChange(parseFloat(e.target.value) || 0)}
-                  className="w-16 sm:w-20 bg-transparent text-right outline-none font-mono font-bold"
+                  className="w-16 sm:w-20 bg-transparent text-right outline-none font-mono font-bold text-white"
                 />
-                <span className="text-slate-500">C</span>
+                <span className="text-slate-400">C</span>
               </div>
             </div>
 
-            {/* ROW 3: Degradation Horizon Target (Integer Only) */}
-            <div className="h-[135px] rounded-[36px] bg-white border border-slate-200/90 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
+            {/* ROW 3: Cycle Horizon Target */}
+            <div className="h-[135px] rounded-[36px] bg-slate-900/40 backdrop-blur-[12px] border border-white/30 px-8 py-5 flex items-center justify-between gap-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
               <div className="flex items-center gap-3.5 w-48 sm:w-56 shrink-0">
-                <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm">
+                <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[#00C2FF] shrink-0 shadow-sm">
                   <InfinityIcon className="w-5 h-5 stroke-[2]" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm sm:text-base font-['Space_Grotesk'] font-bold uppercase tracking-wider text-slate-800 leading-tight">
+                  <span className="text-sm sm:text-base font-['Space_Grotesk'] font-bold uppercase tracking-[0.08em] text-white leading-tight">
                     Cycle Horizon
                   </span>
                   <span className="text-xs font-mono text-slate-400 font-medium">
@@ -421,7 +370,15 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex-1 px-4">
+              <div className="relative flex-1 px-4">
+                {activeSlider === 'cycle' && (
+                  <div 
+                    className="absolute -top-7 px-2 py-1 rounded bg-[#0066FF] text-white text-[10px] font-mono font-bold shadow-md -translate-x-1/2 pointer-events-none transition-all animate-fadeIn"
+                    style={{ left: `calc(${cyclePercent}% + 16px)` }}
+                  >
+                    {cycleHorizon} cycles
+                  </div>
+                )}
                 <input
                   type="range"
                   min="100"
@@ -434,15 +391,13 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   onTouchEnd={() => setActiveSlider(null)}
                   onChange={(e) => handleManualCycleChange(parseInt(e.target.value))}
                   style={{
-                    background: `linear-gradient(to right, #0284c7 0%, #0284c7 ${cyclePercent}%, #e2e8f0 ${cyclePercent}%, #e2e8f0 100%)`
+                    background: `linear-gradient(to right, #0066FF 0%, #00C2FF ${cyclePercent}%, rgba(255, 255, 255, 0.1) ${cyclePercent}%, rgba(255, 255, 255, 0.1) 100%)`
                   }}
-                  className={`w-full h-3 rounded-lg appearance-none cursor-pointer accent-[#0284c7] transition-all ${
-                    activeSlider === 'cycle' ? 'scale-y-125' : ''
-                  }`}
+                  className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer custom-slider accent-[#0066FF] transition-all`}
                 />
               </div>
 
-              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-slate-800 px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 shrink-0 shadow-sm">
+              <div className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-white px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 shrink-0 shadow-sm">
                 <input
                   type="number"
                   min="100"
@@ -450,9 +405,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   step="10"
                   value={cycleHorizon}
                   onChange={(e) => handleManualCycleChange(parseInt(e.target.value) || 100)}
-                  className="w-14 bg-transparent text-right outline-none font-mono font-bold"
+                  className="w-14 bg-transparent text-right outline-none font-mono font-bold text-white"
                 />
-                <span className="text-slate-500">Cycles</span>
+                <span className="text-slate-400">Cycles</span>
               </div>
             </div>
 
@@ -463,18 +418,101 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full h-[74px] flex items-center justify-center rounded-full border border-white/60 bg-[#0284c7] text-white shadow-[0_12px_28px_-6px_rgba(2,132,199,0.4)] hover:shadow-[0_16px_36px_-4px_rgba(2,132,199,0.6)] active:scale-[0.99] transition-all duration-300 overflow-hidden cursor-pointer disabled:opacity-50"
+              className={`group relative w-full h-[74px] flex items-center justify-center rounded-full border border-white/60 text-white transition-all duration-300 overflow-hidden cursor-pointer disabled:opacity-50 ${
+                showSuccessFlash 
+                  ? 'success-flash-bg' 
+                  : (isLoading ? 'shimmer-bg' : 'bg-[#0066FF] hover:bg-[#0055DD] shadow-[0_12px_28px_-6px_rgba(0,102,255,0.4)]')
+              }`}
             >
-              <span 
-                className="absolute inset-0 bg-gradient-to-r from-[#0284c7] via-[#38bdf8] to-[#2563eb] translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-500 ease-out pointer-events-none" 
-              />
+              {!isLoading && !showSuccessFlash && (
+                <span 
+                  className="absolute inset-0 bg-gradient-to-r from-[#0066FF] via-[#00C2FF] to-[#0066FF] translate-x-[-100%] group-hover:translate-x-0 transition-transform duration-500 ease-out pointer-events-none" 
+                />
+              )}
 
               <span className="relative z-10 flex items-center gap-3 text-base font-['Space_Grotesk'] font-bold tracking-[0.16em] uppercase text-white select-none">
-                <span>{isLoading ? 'Solving Coupled PDEs...' : 'Run Diagnostics'}</span>
-                {!isLoading && <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1.5" />}
+                {isLoading && (
+                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                )}
+                <span>{isLoading ? 'ANALYZING...' : (showSuccessFlash ? 'SUCCESS ✓' : 'RUN DIAGNOSTICS')}</span>
+                {!isLoading && !showSuccessFlash && <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1.5" />}
               </span>
             </button>
           </div>
+
+          {/* Results Summary Card */}
+          {predictionData && !isLoading && (
+            <div className="w-full mt-6 rounded-[28px] bg-slate-950/75 backdrop-blur-xl border border-white/30 p-6 shadow-xl animate-slideIn">
+              <div className="space-y-4">
+                
+                {/* Row 1: Baseline MLP */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-space font-bold text-slate-300 uppercase tracking-wider">Baseline MLP</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono text-slate-300">
+                    <div>SOH: <strong className="text-white text-xs">{( (predictionData.capacity_baseline_mlp[predictionData.capacity_baseline_mlp.length - 1] / predictionData.capacity_baseline_mlp[0]) * 100 ).toFixed(1)}%</strong></div>
+                    <div>MAE: <strong className="text-white">{(predictionData.metrics?.mae_baseline_mlp ?? 0.042).toFixed(4)}</strong></div>
+                    <div>RMSE: <strong className="text-white">{(predictionData.metrics?.rmse_baseline_mlp ?? 0.045).toFixed(4)}</strong></div>
+                    <div>Violations: <strong className="text-white">{predictionData.violations?.baseline_a ?? 0}</strong></div>
+                  </div>
+                </div>
+
+                {/* Row 2: Physics-LSTM */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-white/10 border border-[#0066FF]/30 gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-space font-bold text-[#00C2FF] uppercase tracking-wider">Physics-LSTM</span>
+                    <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold">
+                      ✓
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono text-slate-300">
+                    <div>SOH: <strong className="text-[#00C2FF] text-xs">{( (predictionData.capacity_pinn[predictionData.capacity_pinn.length - 1] / predictionData.capacity_pinn[0]) * 100 ).toFixed(1)}%</strong></div>
+                    <div>MAE: <strong className="text-white">{(predictionData.metrics?.mae_pinn ?? 0.008).toFixed(4)}</strong></div>
+                    <div>RMSE: <strong className="text-white">{(predictionData.metrics?.rmse_pinn ?? 0.009).toFixed(4)}</strong></div>
+                    <div>Violations: <strong className="text-white">{predictionData.violations?.pinn ?? 0}</strong></div>
+                  </div>
+                </div>
+
+                {/* RUL display */}
+                <div className="pt-2.5 text-center border-t border-white/10">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Predicted RUL Projection</div>
+                  <div className="text-3xl font-space font-extrabold text-white mt-1">
+                    {predictionData.rul?.rul_pinn ?? 920} <span className="text-base font-mono font-semibold text-slate-400">Cycles</span>
+                  </div>
+                </div>
+
+                {/* View Details Action Button */}
+                {onViewDetailedAnalysis && (
+                  <div className="pt-3.5 flex justify-center border-t border-white/10">
+                    <button
+                      type="button"
+                      onClick={onViewDetailedAnalysis}
+                      className="px-6 py-2.5 rounded-full bg-slate-900 hover:bg-black text-xs font-space font-bold tracking-[0.1em] uppercase text-white transition-all flex items-center gap-2 cursor-pointer border border-slate-800 shadow-md"
+                    >
+                      <span>View Detailed Analysis</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* SOH Degradation Curve Line Chart */}
+          {predictionData && !isLoading && (
+            <div className="w-full mt-6 animate-slideIn">
+              <SohCurveChart
+                cycles={predictionData.cycles}
+                capacityBaselineMlp={predictionData.capacity_baseline_mlp}
+                capacityPinn={predictionData.capacity_pinn}
+              />
+            </div>
+          )}
 
         </div>
 

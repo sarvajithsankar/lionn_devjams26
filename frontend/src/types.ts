@@ -28,6 +28,8 @@ export interface Metrics {
   mape_pinn: number;
   physics_violation_index_baseline_mlp: number;
   physics_violation_index_pinn: number;
+  mae_baseline_mlp?: number;
+  mae_pinn?: number;
 }
 
 export interface PhysicsLossTrace {
@@ -51,6 +53,10 @@ export interface PredictResponse {
   metrics: Metrics;
   physics_loss_trace: PhysicsLossTrace;
   rul: RulPrediction;
+  violations?: {
+    baseline_a: number;
+    pinn: number;
+  };
 }
 
 export interface BatteryScenarioPreset {
