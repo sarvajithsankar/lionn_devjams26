@@ -1,6 +1,5 @@
 services:
   backend:
-    image: sarvajithsankar/battery-health-predictor:latest
     build:
       context: .
       dockerfile: Dockerfile
