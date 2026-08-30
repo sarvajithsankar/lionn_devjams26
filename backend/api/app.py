@@ -172,21 +172,32 @@ def get_profiles() -> dict:
 def predict(req: PredictRequest) -> dict:
     warning_msg = None
     scaler = STATE["scaler"]
+    df = STATE["raw"]
+
+    # Override inputs with dataset profile parameters if a valid profile is selected
+    c_rate = req.c_rate
+    temperature = req.temperature
+    if df is not None and req.profile_id:
+        subset = df[df["profile_id"] == req.profile_id]
+        if not subset.empty:
+            c_rate = float(subset["c_rate"].iloc[0])
+            temperature = float(subset["temperature"].iloc[0])
+
     if scaler is not None and hasattr(scaler, "data_min_") and hasattr(scaler, "data_max_"):
         c_rate_min, c_rate_max = float(scaler.data_min_[1]), float(scaler.data_max_[1])
         temp_min, temp_max = float(scaler.data_min_[2]), float(scaler.data_max_[2])
         logger.info(
             "Request inputs: c_rate=%.4f (trained: [%.4f, %.4f]), temp=%.4f (trained: [%.4f, %.4f])",
-            req.c_rate, c_rate_min, c_rate_max, req.temperature, temp_min, temp_max
+            c_rate, c_rate_min, c_rate_max, temperature, temp_min, temp_max
         )
-        if req.c_rate < c_rate_min or req.c_rate > c_rate_max or req.temperature < temp_min or req.temperature > temp_max:
+        if c_rate < c_rate_min or c_rate > c_rate_max or temperature < temp_min or temperature > temp_max:
             warning_msg = (
-                f"Extrapolation warning: Requested conditions (C-rate: {req.c_rate:.2f}C, Temp: {req.temperature:.1f}°C) "
+                f"Extrapolation warning: Requested conditions (C-rate: {c_rate:.2f}C, Temp: {temperature:.1f}°C) "
                 f"are outside the model's trained range (C-rate: [{c_rate_min:.2f}, {c_rate_max:.2f}], Temp: [{temp_min:.1f}, {temp_max:.1f}]). "
                 "Extrapolation predictions may be unreliable."
             )
             logger.warning(warning_msg)
-            scaled_sample = scaler.transform([[1, req.c_rate, req.temperature]])[0]
+            scaled_sample = scaler.transform([[1, c_rate, temperature]])[0]
             logger.info(
                 "Scaled inputs (unclamped): cycle_scaled=%.4f, c_rate_scaled=%.4f, temp_scaled=%.4f",
                 scaled_sample[0], scaled_sample[1], scaled_sample[2]
@@ -196,8 +207,8 @@ def predict(req: PredictRequest) -> dict:
     X_raw = np.stack(
         [
             cycles,
-            np.full(req.n_cycles, req.c_rate, dtype=np.float32),
-            np.full(req.n_cycles, req.temperature, dtype=np.float32),
+            np.full(req.n_cycles, c_rate, dtype=np.float32),
+            np.full(req.n_cycles, temperature, dtype=np.float32),
         ],
         axis=1,
     )
@@ -299,12 +310,23 @@ def predict_lstm(req: PredictRequest) -> dict:
 
     warning_msg = None
     scaler = STATE["scaler"]
+    df = STATE["raw"]
+
+    # Override inputs with dataset profile parameters if a valid profile is selected
+    c_rate = req.c_rate
+    temperature = req.temperature
+    if df is not None and req.profile_id:
+        subset = df[df["profile_id"] == req.profile_id]
+        if not subset.empty:
+            c_rate = float(subset["c_rate"].iloc[0])
+            temperature = float(subset["temperature"].iloc[0])
+
     if scaler is not None and hasattr(scaler, "data_min_") and hasattr(scaler, "data_max_"):
         c_rate_min, c_rate_max = float(scaler.data_min_[1]), float(scaler.data_max_[1])
         temp_min, temp_max = float(scaler.data_min_[2]), float(scaler.data_max_[2])
-        if req.c_rate < c_rate_min or req.c_rate > c_rate_max or req.temperature < temp_min or req.temperature > temp_max:
+        if c_rate < c_rate_min or c_rate > c_rate_max or temperature < temp_min or temperature > temp_max:
             warning_msg = (
-                f"Extrapolation warning: Requested conditions (C-rate: {req.c_rate:.2f}C, Temp: {req.temperature:.1f}°C) "
+                f"Extrapolation warning: Requested conditions (C-rate: {c_rate:.2f}C, Temp: {temperature:.1f}°C) "
                 f"are outside the model's trained range (C-rate: [{c_rate_min:.2f}, {c_rate_max:.2f}], Temp: [{temp_min:.1f}, {temp_max:.1f}])."
             )
 
@@ -312,8 +334,8 @@ def predict_lstm(req: PredictRequest) -> dict:
     X_raw = np.stack(
         [
             cycles,
-            np.full(req.n_cycles, req.c_rate, dtype=np.float32),
-            np.full(req.n_cycles, req.temperature, dtype=np.float32),
+            np.full(req.n_cycles, c_rate, dtype=np.float32),
+            np.full(req.n_cycles, temperature, dtype=np.float32),
         ],
         axis=1,
     )
